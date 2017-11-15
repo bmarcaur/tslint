@@ -1,0 +1,15 @@
+import * as ts from 'typescript';
+
+import {assert} from 'chai';
+                     ~~~~~~ [err % ('chai')]
+
+import foo from 'foo';
+
+import {baz} from 'baz';
+
+import {anything} from '#/test/a/path';
+
+import * as fsevents from "fsevents";
+                          ~~~~~~~~~~  [Module 'fsevents' is not listed as dependency in package.json]
+
+[err]: Module '%s' is not listed as dependency in package.json

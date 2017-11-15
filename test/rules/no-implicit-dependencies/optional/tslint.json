@@ -1,5 +1,5 @@
 {
   "rules": {
-    "no-implicit-dependencies": [true, "optional"]
+    "no-implicit-dependencies": [true, {"optional": true }]
   }
 }

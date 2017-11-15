@@ -26,10 +26,12 @@ import * as Lint from "../index";
 interface Options {
     dev: boolean;
     optional: boolean;
+    ignore: ReadonlyArray<string>;
 }
 
 const OPTION_DEV = "dev";
 const OPTION_OPTIONAL = "optional";
+const OPTION_IGNORE = "ignore";
 
 export class Rule extends Lint.Rules.AbstractRule {
     /* tslint:disable:object-literal-sort-keys */
@@ -43,17 +45,25 @@ export class Rule extends Lint.Rules.AbstractRule {
             By default the rule looks at \`"dependencies"\` and \`"peerDependencies"\`.
             By adding the \`"${OPTION_DEV}"\` option the rule looks at \`"devDependencies"\` instead of \`"peerDependencies"\`.
             By adding the \`"${OPTION_OPTIONAL}"\` option the rule also looks at \`"optionalDependencies"\`.
+            By adding the \`"${OPTION_IGNORE}"\` option the rule will ignore certain imports e.g. alias for absolute imports.
         `,
         options: {
-            type: "array",
-            items: {
-                type: "string",
-                enum: [OPTION_DEV, OPTION_OPTIONAL],
+            type: "object",
+            properties: {
+                dev: { type: "boolean" },
+                optional : { type: "boolean" },
+                ignore: {
+                    type: "array",
+                    items: {
+                        type: "string",
+                    },
+                },
             },
-            minItems: 0,
-            maxItems: 2,
         },
-        optionExamples: [true, [true, OPTION_DEV], [true, OPTION_OPTIONAL]],
+        optionExamples: [
+            true,
+            [true, { dev: true, optional: false, ignore: ["#"]}],
+        ],
         type: "functionality",
         typescriptOnly: false,
     };
@@ -64,11 +74,18 @@ export class Rule extends Lint.Rules.AbstractRule {
     }
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
-        return this.applyWithFunction(sourceFile, walk, {
-            dev: this.ruleArguments.indexOf(OPTION_DEV) !== - 1,
-            optional: this.ruleArguments.indexOf(OPTION_OPTIONAL) !== -1,
-        });
+        const options: Options = parseOptions(this.ruleArguments[0]);
+        return this.applyWithFunction(sourceFile, walk, options);
     }
+}
+
+function parseOptions(options: Partial<Options> | undefined): Options {
+    return {
+        dev: false,
+        ignore: [],
+        optional: false,
+        ...options,
+    };
 }
 
 function walk(ctx: Lint.WalkContext<Options>) {
@@ -77,17 +94,20 @@ function walk(ctx: Lint.WalkContext<Options>) {
     for (const name of findImports(ctx.sourceFile, ImportKind.All)) {
         if (!ts.isExternalModuleNameRelative(name.text)) {
             const packageName = getPackageName(name.text);
-            if (builtins.indexOf(packageName) === -1 && !hasDependency(packageName)) {
+            if (builtins.indexOf(packageName) === -1 && shouldWarnAboutDependency(packageName)) {
                 ctx.addFailureAtNode(name, Rule.FAILURE_STRING_FACTORY(packageName));
             }
         }
     }
 
-    function hasDependency(module: string): boolean {
+    function shouldWarnAboutDependency(module: string): boolean {
         if (dependencies === undefined) {
             dependencies = getDependencies(ctx.sourceFile.fileName, options);
         }
-        return dependencies.has(module);
+
+        const hasDependency = dependencies.has(module);
+        const shouldIgnore = options.ignore.indexOf(module) !== -1;
+        return !(hasDependency || shouldIgnore);
     }
 }
 
